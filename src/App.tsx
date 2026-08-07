@@ -12,6 +12,8 @@ const ROBOT_SOCKET_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws
 const FIELD_LENGTH_METERS = 16.54
 const FIELD_WIDTH_METERS = 8.21
 const FIELD_ORIGIN_IN_MODEL = new Vector3(-FIELD_LENGTH_METERS / 2, -FIELD_WIDTH_METERS / 2, 0)
+// The robot asset's forward axis is perpendicular to the telemetry frame.
+const ROBOT_MODEL_ROTATION = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), Math.PI / 2)
 
 type GraphicsInfo = {
   hardwareAccelerated: boolean
@@ -241,24 +243,26 @@ function RobotModel({ pose }: { pose: React.MutableRefObject<RobotPose | null> }
   const { invalidate } = useThree()
   const visualPosition = useMemo(() => new Vector3(), [])
   const visualQuaternion = useMemo(() => new Quaternion(), [])
+  const targetQuaternion = useMemo(() => new Quaternion(), [])
 
   useFrame((_, delta) => {
     const target = pose.current
     if (!robot.current || !target) return
 
     const targetPosition = target.position.clone().add(FIELD_ORIGIN_IN_MODEL)
+    targetQuaternion.copy(target.quaternion).multiply(ROBOT_MODEL_ROTATION)
     if (!hasInitialPose.current) {
       visualPosition.copy(targetPosition)
-      visualQuaternion.copy(target.quaternion)
+      visualQuaternion.copy(targetQuaternion)
       hasInitialPose.current = true
     }
     const blend = 1 - Math.exp(-12 * delta)
     visualPosition.lerp(targetPosition, blend)
-    visualQuaternion.slerp(target.quaternion, blend)
+    visualQuaternion.slerp(targetQuaternion, blend)
     robot.current.position.copy(visualPosition)
     robot.current.quaternion.copy(visualQuaternion)
 
-    if (visualPosition.distanceToSquared(targetPosition) > 0.000001 || 1 - Math.abs(visualQuaternion.dot(target.quaternion)) > 0.000001) {
+    if (visualPosition.distanceToSquared(targetPosition) > 0.000001 || 1 - Math.abs(visualQuaternion.dot(targetQuaternion)) > 0.000001) {
       invalidate()
     }
   })
