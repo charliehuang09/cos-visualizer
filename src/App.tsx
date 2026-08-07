@@ -5,7 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { ACESFilmicToneMapping, Box3, Color, Group, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Quaternion, Sphere, Vector3 } from 'three'
 
 const ROBOT_ASSET_URL = '/robot_optimized.glb'
-const ROBOT_SOCKET_URL = 'ws://127.0.0.1:5805/robot'
+const ROBOT_SOCKET_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/robot`
 
 // WPILib's field origin is the blue-alliance corner. The exported field is centered
 // at the world origin, uses meters, and has Z as its up axis.
