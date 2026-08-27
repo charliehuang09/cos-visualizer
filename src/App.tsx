@@ -27,6 +27,23 @@ type RobotPose = {
 }
 
 type SocketStatus = 'connecting' | 'live' | 'reconnecting' | 'disconnected'
+type MovementKey = 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD' | 'Space' | 'ShiftLeft' | 'ShiftRight'
+
+function getMovementKey(event: KeyboardEvent): MovementKey | null {
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+    return event.code as MovementKey
+  }
+
+  switch (event.key.toLowerCase()) {
+    case 'w': return 'KeyW'
+    case 'a': return 'KeyA'
+    case 's': return 'KeyS'
+    case 'd': return 'KeyD'
+    case ' ': return 'Space'
+    case 'shift': return 'ShiftLeft'
+    default: return null
+  }
+}
 
 function parsePose(message: string): RobotPose | null {
   try {
@@ -66,13 +83,12 @@ function getGraphicsInfo(context: WebGLRenderingContext | WebGL2RenderingContext
 
 function CameraController({ scene }: { scene: Object3D }) {
   const { camera, gl, invalidate } = useThree()
-  const pressedKeys = useRef(new Set<string>())
+  const pressedKeys = useRef(new Set<MovementKey>())
   const movementSpeed = useRef(0)
   const pitch = useRef(0)
   const forward = useRef(new Vector3())
   const right = useRef(new Vector3())
   const movement = useRef(new Vector3())
-  const velocity = useRef(new Vector3())
   const worldUp = useRef(new Vector3(0, 0, 1))
 
   const bounds = useMemo(() => new Box3().setFromObject(scene), [scene])
@@ -91,14 +107,12 @@ function CameraController({ scene }: { scene: Object3D }) {
     if (pressedKeys.current.has('Space')) movement.current.add(worldUp.current)
     if (pressedKeys.current.has('ShiftLeft') || pressedKeys.current.has('ShiftRight')) movement.current.sub(worldUp.current)
 
-    if (movement.current.lengthSq() > 0) movement.current.normalize().multiplyScalar(movementSpeed.current)
-    velocity.current.lerp(movement.current, 1 - Math.exp(-10 * delta))
-
-    if (velocity.current.lengthSq() < 0.0001) {
-      velocity.current.set(0, 0, 0)
+    if (movement.current.lengthSq() === 0) {
       return
     }
-    camera.position.addScaledVector(velocity.current, delta)
+
+    movement.current.normalize().multiplyScalar(movementSpeed.current)
+    camera.position.addScaledVector(movement.current, Math.min(delta, 0.05))
     invalidate()
   })
 
@@ -125,18 +139,26 @@ function CameraController({ scene }: { scene: Object3D }) {
       invalidate()
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(event.code)) return
+      const key = getMovementKey(event)
+      if (!key) return
       event.preventDefault()
-      pressedKeys.current.add(event.code)
+      pressedKeys.current.add(key)
       updateMovementState()
     }
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (!pressedKeys.current.delete(event.code)) return
+      const key = getMovementKey(event)
+      if (!key || !pressedKeys.current.delete(key)) return
       event.preventDefault()
       updateMovementState()
     }
     const clearMovement = () => {
       pressedKeys.current.clear()
+    }
+    const handlePointerLockChange = () => {
+      if (document.pointerLockElement !== gl.domElement) clearMovement()
+    }
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearMovement()
     }
     const handleCanvasClick = () => {
       gl.domElement.requestPointerLock()
@@ -151,18 +173,22 @@ function CameraController({ scene }: { scene: Object3D }) {
       invalidate()
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
+    document.addEventListener('keydown', handleKeyDown, true)
+    document.addEventListener('keyup', handleKeyUp, true)
     window.addEventListener('blur', clearMovement)
     gl.domElement.addEventListener('click', handleCanvasClick)
     document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('pointerlockchange', handlePointerLockChange)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
+      document.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('blur', clearMovement)
       gl.domElement.removeEventListener('click', handleCanvasClick)
       document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('pointerlockchange', handlePointerLockChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [bounds, camera, gl, invalidate])
 
